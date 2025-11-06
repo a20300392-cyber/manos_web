@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Prueba modelo letras</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0"></script>
+  </head>
+  <body>
+    <h1>Prueba del modelo de letras</h1>
+    <button onclick="probarModelo()">Probar modelo</button>
+    <pre id="resultado"></pre>
+
+    <script>
+      let modelo;
+
+      async function cargarModelo() {
+        modelo = await tf.loadLayersModel('./model.json');
+        document.getElementById('resultado').innerText = '✅ Modelo cargado correctamente';
+      }
+
+      async function probarModelo() {
+        if (!modelo) {
+          await cargarModelo();
+        }
+
+        // Crear datos falsos (solo para probar)
+        const entrada = tf.randomNormal([1, 21, 3]); // igual a los landmarks de una mano (21 puntos x 3 coordenadas)
+        const prediccion = modelo.predict(entrada);
+        const resultado = await prediccion.data();
+
+        document.getElementById('resultado').innerText = 
+          '✅ Modelo cargado.\nPredicción de ejemplo:\n' + JSON.stringify(resultado);
+      }
+    </script>
+  </body>
+</html>

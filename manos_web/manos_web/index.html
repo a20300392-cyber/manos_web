@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Manos en Acción - Traducción LSM</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #1e1e2f;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 5px #000;
+        }
+        .container {
+            position: relative;
+            display: inline-block;
+        }
+        video {
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+            transform: scaleX(-1);
+            width: 640px;
+            height: 480px;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #letterBox {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 10px;
+            padding: 15px 25px;
+            font-size: 48px;
+            font-weight: bold;
+            color: #00ffcc;
+            box-shadow: 0 0 15px #00ffcc;
+            transition: all 0.2s ease-in-out;
+        }
+        #letterBox.pop {
+            transform: scale(1.2);
+        }
+        button {
+            margin: 10px;
+            padding: 12px 25px;
+            font-size: 16px;
+            border: none;
+            border-radius: 10px;
+            background: #00ffcc;
+            color: #1e1e2f;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #00e6b8;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <h1>Manos en Acción - Traducción LSM</h1>
+    <div class="container">
+        <video id="video" autoplay></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
+        <div id="letterBox">-</div>
+    </div>
+    <div>
+        <button id="startBtn">Iniciar Cámara</button>
+        <button id="stopBtn">Detener Cámara</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let letterBox = document.getElementById('letterBox');
+        let model, labels, stream, hands;
+
+        async function loadModel() {
+            model = await tf.loadLayersModel('modelo/model.json');
+            const response = await fetch('modelo/labels.json');
+            labels = await response.json();
+            console.log('Modelo y labels cargados');
+        }
+
+        async function startCamera() {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            video.play();
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults);
+
+        function onResults(results) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffcc', lineWidth: 2});
+                drawLandmarks(ctx, landmarks, {color: '#ff0077', lineWidth: 2});
+
+                const input = tf.tensor2d([landmarks.map(l => [l.x, l.y, l.z]).flat()]);
+                const prediction = model.predict(input);
+                const predictedIndex = prediction.argMax(-1).dataSync()[0];
+                
+                // Animación "pop" del letterBox
+                letterBox.innerText = labels[predictedIndex];
+                letterBox.classList.add('pop');
+                setTimeout(() => letterBox.classList.remove('pop'), 150);
+
+                input.dispose();
+                prediction.dispose();
+            }
+        }
+
+        async function detectLoop() {
+            if (!video.srcObject) return;
+            await hands.send({image: video});
+            requestAnimationFrame(detectLoop);
+        }
+
+        document.getElementById('startBtn').addEventListener('click', async () => {
+            await startCamera();
+            detectLoop();
+        });
+        document.getElementById('stopBtn').addEventListener('click', stopCamera);
+
+        loadModel();
+    </script>
+</body>
+</html>
+
